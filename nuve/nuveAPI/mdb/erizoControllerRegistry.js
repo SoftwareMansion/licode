@@ -17,6 +17,21 @@ exports.getErizoControllers = function (callback) {
     });
 };
 
+exports.getTimedOutErizoControllers = function (timeoutMs, callback) {
+    var query = {
+        keepAliveTs: {
+            $lt: new Date(new Date().getTime() - timeoutMs)
+        }
+    };
+    db.erizoControllers.find(query).toArray(function (err, erizoControllers) {
+        if (err || !erizoControllers) {
+            log.info('message: service getList empty');
+        } else {
+            callback(erizoControllers);
+        }
+    });
+};
+
 var getErizoController = exports.getErizoController = function (id, callback) {
     db.erizoControllers.findOne({_id: db.ObjectId(id)}, function (err, erizoController) {
         if (erizoController === undefined) {
@@ -54,12 +69,6 @@ exports.addErizoController = function (erizoController, callback) {
  */
 exports.updateErizoController = function (id, erizoController) {
     db.erizoControllers.update({_id: db.ObjectId(id)}, {$set: erizoController}, function (error) {
-        if (error) log.warn('message: updateErizoController error, ' + logger.objectToLog(error));
-    });
-};
-
-exports.incrementKeepAlive = function(id) {
-    db.erizoControllers.update({_id: db.ObjectId(id)}, {$inc: {keepAlive: 1}}, function (error) {
         if (error) log.warn('message: updateErizoController error, ' + logger.objectToLog(error));
     });
 };
