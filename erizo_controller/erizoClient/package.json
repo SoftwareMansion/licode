@@ -1,0 +1,31 @@
+{
+  "name": "ErizoClient",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "amqp": "^0.2.6",
+    "del": "^3.0.0",
+    "eslint-config-airbnb": "^15.1.0",
+    "eslint-plugin-import": "^2.7.0",
+    "eslint-plugin-jsx-a11y": "^6.0.2",
+    "eslint-plugin-react": "^7.4.0",
+    "expose-loader": "^0.7.3",
+    "google-closure-compiler-js": "^20170910.0.1",
+    "gulp-eslint": "^4.0.0",
+    "gulp-sourcemaps": "^2.6.1",
+    "log4js": "^1.0.1",
+    "node-getopt": "^0.2.3",
+    "run-sequence": "^2.2.0",
+    "script-loader": "^0.7.2",
+    "socket.io": "^2.0.3",
+    "uuid": "^3.1.0",
+    "webpack": "^3.6.0",
+    "webpack-stream": "^4.0.0"
+  },
+  "scripts": {
+    "build": "gulp erizo"
+  },
+  "devDependencies": {
+    "gulp": "^3.9.1"
+  }
+}

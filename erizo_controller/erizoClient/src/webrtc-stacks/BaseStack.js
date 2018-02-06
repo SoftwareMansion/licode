@@ -19,6 +19,9 @@ const BaseStack = (specInput) => {
   if (specBase.iceServers !== undefined) {
     that.pcConfig.iceServers = specBase.iceServers;
   }
+  if (specBase.forceTurn === true) {
+    that.pcConfig.iceTransportPolicy = 'relay';
+  }
   if (specBase.audio === undefined) {
     specBase.audio = true;
   }
@@ -30,8 +33,8 @@ const BaseStack = (specInput) => {
   specBase.remoteDescriptionSet = false;
 
   that.mediaConstraints = {
-    offerToReceiveVideo: (specBase.video !== undefined),
-    offerToReceiveAudio: (specBase.audio !== undefined),
+    offerToReceiveVideo: (specBase.video !== undefined && specBase.video !== false),
+    offerToReceiveAudio: (specBase.audio !== undefined && specBase.audio !== false),
   };
 
   that.peerConnection = new RTCPeerConnection(that.pcConfig, that.con);
@@ -221,26 +224,28 @@ const BaseStack = (specInput) => {
       localDesc.sdp = SdpHelpers.setMaxBW(localDesc.sdp, specBase);
       if (config.Sdp || config.maxAudioBW) {
         Logger.debug('Updating with SDP renegotiation', specBase.maxVideoBW, specBase.maxAudioBW);
-        that.peerConnection.setLocalDescription(localDesc).then(() => {
-          remoteDesc.sdp = SdpHelpers.setMaxBW(remoteDesc.sdp, specBase);
-          that.peerConnection.setRemoteDescription(new RTCSessionDescription(remoteDesc))
+        that.peerConnection.setLocalDescription(localDesc)
           .then(() => {
+            remoteDesc.sdp = SdpHelpers.setMaxBW(remoteDesc.sdp, specBase);
+            return that.peerConnection.setRemoteDescription(new RTCSessionDescription(remoteDesc));
+          }).then(() => {
             specBase.remoteDescriptionSet = true;
             specBase.callback({ type: 'updatestream', sdp: localDesc.sdp });
-          }).catch(errorCallback.bind(null, 'updateSpec', undefined));
-        }).catch(errorCallback.bind(null, 'updateSpec', callback));
+          }).catch(errorCallback.bind(null, 'updateSpec', callback));
       } else {
         Logger.debug('Updating without SDP renegotiation, ' +
-                                'newVideoBW:', specBase.maxVideoBW,
-                                'newAudioBW:', specBase.maxAudioBW);
+                     'newVideoBW:', specBase.maxVideoBW,
+                     'newAudioBW:', specBase.maxAudioBW);
         specBase.callback({ type: 'updatestream', sdp: localDesc.sdp });
       }
     }
     if (config.minVideoBW || (config.slideShowMode !== undefined) ||
-            (config.muteStream !== undefined) || (config.qualityLayer !== undefined)) {
+            (config.muteStream !== undefined) || (config.qualityLayer !== undefined) ||
+            (config.video !== undefined)) {
       Logger.debug('MinVideo Changed to ', config.minVideoBW);
       Logger.debug('SlideShowMode Changed to ', config.slideShowMode);
       Logger.debug('muteStream changed to ', config.muteStream);
+      Logger.debug('Video Constraints', config.video);
       specBase.callback({ type: 'updatestream', config });
     }
   };

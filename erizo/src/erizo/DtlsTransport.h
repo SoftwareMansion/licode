@@ -45,7 +45,7 @@ class DtlsTransport : dtls::DtlsReceiver, public Transport {
 
  private:
   char protectBuf_[5000];
-  std::shared_ptr<dataPacket> unprotect_packet_;
+  std::shared_ptr<DataPacket> unprotect_packet_;
   boost::scoped_ptr<dtls::DtlsSocketContext> dtlsRtp, dtlsRtcp;
   boost::mutex writeMutex_, sessionMutex_;
   boost::scoped_ptr<SrtpChannel> srtp_, srtcp_;
@@ -78,7 +78,7 @@ class Resender {
   packetPtr packet_;
   unsigned int resend_seconds_;
   unsigned int max_resends_;
-  int scheduled_task_ = -1;
+  std::shared_ptr<ScheduledTaskReference> scheduled_task_;
 };
 }  // namespace erizo
 #endif  // ERIZO_SRC_ERIZO_DTLSTRANSPORT_H_

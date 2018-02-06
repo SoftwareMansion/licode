@@ -44,6 +44,7 @@ void SenderBandwidthEstimationHandler::notifyUpdate() {
   auto pipeline = getContext()->getPipelineShared();
   if (pipeline && !connection_) {
     connection_ = pipeline->getService<WebRtcConnection>().get();
+    processor_ = pipeline->getService<RtcpProcessor>();
   }
   if (!connection_) {
     return;
@@ -55,7 +56,7 @@ void SenderBandwidthEstimationHandler::notifyUpdate() {
   initialized_ = true;
 }
 
-void SenderBandwidthEstimationHandler::read(Context *ctx, std::shared_ptr<dataPacket> packet) {
+void SenderBandwidthEstimationHandler::read(Context *ctx, std::shared_ptr<DataPacket> packet) {
   RtcpHeader *chead = reinterpret_cast<RtcpHeader*>(packet->data);
   if (chead->isFeedback()) {
     char* packet_pointer = packet->data;
@@ -117,9 +118,12 @@ void SenderBandwidthEstimationHandler::read(Context *ctx, std::shared_ptr<dataPa
                 received_remb_ = true;
                 int64_t now_ms = ClockUtils::timePointToMs(clock_->now());
                 uint64_t bitrate = chead->getBrMantis() << chead->getBrExp();
+                uint64_t cappedBitrate = bitrate < processor_->getMaxVideoBW() ? bitrate : processor_->getMaxVideoBW();
+                chead->setREMBBitRate(cappedBitrate);
+
                 ELOG_DEBUG("%s message: Updating Estimate with REMB, bitrate %lu", connection_->toLog(),
-                    bitrate);
-                sender_bwe_->UpdateReceiverEstimate(now_ms, bitrate);
+                    cappedBitrate);
+                sender_bwe_->UpdateReceiverEstimate(now_ms, cappedBitrate);
                 updateEstimate();
               } else {
                 ELOG_DEBUG("%s message: Unsupported AFB Packet not REMB", connection_->toLog());
@@ -136,7 +140,7 @@ void SenderBandwidthEstimationHandler::read(Context *ctx, std::shared_ptr<dataPa
   ctx->fireRead(std::move(packet));
 }
 
-void SenderBandwidthEstimationHandler::write(Context *ctx, std::shared_ptr<dataPacket> packet) {
+void SenderBandwidthEstimationHandler::write(Context *ctx, std::shared_ptr<DataPacket> packet) {
   RtcpHeader *chead = reinterpret_cast<RtcpHeader*>(packet->data);
   if (!chead->isRtcp() && packet->type == VIDEO_PACKET) {
     period_packets_sent_++;

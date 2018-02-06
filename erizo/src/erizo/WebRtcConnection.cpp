@@ -276,10 +276,10 @@ void WebRtcConnection::initializePipeline() {
 
   pipeline_->addFront(LayerDetectorHandler());
   pipeline_->addFront(RtcpProcessorHandler());
-  pipeline_->addFront(IncomingStatsHandler());
   pipeline_->addFront(FecReceiverHandler());
   pipeline_->addFront(LayerBitrateCalculationHandler());
   pipeline_->addFront(QualityFilterHandler());
+  pipeline_->addFront(IncomingStatsHandler());
   pipeline_->addFront(RtpTrackMuteHandler());
   pipeline_->addFront(RtpSlideShowHandler());
   pipeline_->addFront(RtpPaddingGeneratorHandler());
@@ -401,31 +401,31 @@ void WebRtcConnection::onCandidate(const CandidateInfo& cand, Transport *transpo
   }
 }
 
-int WebRtcConnection::deliverAudioData_(std::shared_ptr<dataPacket> audio_packet) {
+int WebRtcConnection::deliverAudioData_(std::shared_ptr<DataPacket> audio_packet) {
   if (bundle_) {
     if (videoTransport_.get() != nullptr) {
       if (audioEnabled_ == true) {
-        sendPacketAsync(std::make_shared<dataPacket>(*audio_packet));
+        sendPacketAsync(std::make_shared<DataPacket>(*audio_packet));
       }
     }
   } else if (audioTransport_.get() != nullptr) {
     if (audioEnabled_ == true) {
-        sendPacketAsync(std::make_shared<dataPacket>(*audio_packet));
+        sendPacketAsync(std::make_shared<DataPacket>(*audio_packet));
     }
   }
   return audio_packet->length;
 }
 
-int WebRtcConnection::deliverVideoData_(std::shared_ptr<dataPacket> video_packet) {
+int WebRtcConnection::deliverVideoData_(std::shared_ptr<DataPacket> video_packet) {
   if (videoTransport_.get() != nullptr) {
     if (videoEnabled_ == true) {
-      sendPacketAsync(std::make_shared<dataPacket>(*video_packet));
+      sendPacketAsync(std::make_shared<DataPacket>(*video_packet));
     }
   }
   return video_packet->length;
 }
 
-int WebRtcConnection::deliverFeedback_(std::shared_ptr<dataPacket> fb_packet) {
+int WebRtcConnection::deliverFeedback_(std::shared_ptr<DataPacket> fb_packet) {
   RtcpHeader *chead = reinterpret_cast<RtcpHeader*>(fb_packet->data);
   uint32_t recvSSRC = chead->getSourceSSRC();
   if (isVideoSourceSSRC(recvSSRC)) {
@@ -441,7 +441,18 @@ int WebRtcConnection::deliverFeedback_(std::shared_ptr<dataPacket> fb_packet) {
   return fb_packet->length;
 }
 
-void WebRtcConnection::onTransportData(std::shared_ptr<dataPacket> packet, Transport *transport) {
+int WebRtcConnection::deliverEvent_(MediaEventPtr event) {
+  auto conn_ptr = shared_from_this();
+  worker_->task([conn_ptr, event]{
+    if (!conn_ptr->pipeline_initialized_) {
+      return;
+    }
+    conn_ptr->pipeline_->notifyEvent(event);
+  });
+  return 1;
+}
+
+void WebRtcConnection::onTransportData(std::shared_ptr<DataPacket> packet, Transport *transport) {
   if ((audio_sink_ == nullptr && video_sink_ == nullptr && fb_sink_ == nullptr) ||
       getCurrentState() != CONN_READY) {
     return;
@@ -473,7 +484,7 @@ void WebRtcConnection::onTransportData(std::shared_ptr<dataPacket> packet, Trans
   pipeline_->read(std::move(packet));
 }
 
-void WebRtcConnection::read(std::shared_ptr<dataPacket> packet) {
+void WebRtcConnection::read(std::shared_ptr<DataPacket> packet) {
   char* buf = packet->data;
   int len = packet->length;
   // PROCESS RTCP
@@ -529,6 +540,10 @@ void WebRtcConnection::read(std::shared_ptr<dataPacket> packet) {
   }  // if not Feedback
 }
 
+void WebRtcConnection::notifyToEventSink(MediaEventPtr event) {
+  event_sink_->deliverEvent(event);
+}
+
 int WebRtcConnection::sendPLI() {
   RtcpHeader thePLI;
   thePLI.setPacketType(RTCP_PS_Feedback_PT);
@@ -538,7 +553,7 @@ int WebRtcConnection::sendPLI() {
   thePLI.setLength(2);
   char *buf = reinterpret_cast<char*>(&thePLI);
   int len = (thePLI.getLength() + 1) * 4;
-  sendPacketAsync(std::make_shared<dataPacket>(0, buf, len, VIDEO_PACKET));
+  sendPacketAsync(std::make_shared<DataPacket>(0, buf, len, VIDEO_PACKET));
   return len;
 }
 
@@ -696,14 +711,14 @@ void WebRtcConnection::trackTransportInfo() {
 }
 
 // changes the outgoing payload type for in the given data packet
-void WebRtcConnection::sendPacketAsync(std::shared_ptr<dataPacket> packet) {
+void WebRtcConnection::sendPacketAsync(std::shared_ptr<DataPacket> packet) {
   if (!sending_ || getCurrentState() != CONN_READY) {
     return;
   }
   auto conn_ptr = shared_from_this();
   if (packet->comp == -1) {
     sending_ = false;
-    auto p = std::make_shared<dataPacket>();
+    auto p = std::make_shared<DataPacket>();
     p->comp = -1;
     worker_->task([conn_ptr, p]{
       conn_ptr->sendPacket(p);
@@ -742,6 +757,12 @@ void WebRtcConnection::muteStream(bool mute_video, bool mute_audio) {
   });
 }
 
+void WebRtcConnection::setVideoConstraints(int max_video_width, int max_video_height, int max_video_frame_rate) {
+  asyncTask([max_video_width, max_video_height, max_video_frame_rate] (std::shared_ptr<WebRtcConnection> connection) {
+    connection->quality_manager_->setVideoConstraints(max_video_width, max_video_height, max_video_frame_rate);
+  });
+}
+
 void WebRtcConnection::setFeedbackReports(bool will_send_fb, uint32_t target_bitrate) {
   if (slide_show_mode_) {
     target_bitrate = 0;
@@ -770,7 +791,7 @@ void WebRtcConnection::getJSONStats(std::function<void(std::string)> callback) {
   });
 }
 
-void WebRtcConnection::changeDeliverPayloadType(dataPacket *dp, packetType type) {
+void WebRtcConnection::changeDeliverPayloadType(DataPacket *dp, packetType type) {
   RtpHeader* h = reinterpret_cast<RtpHeader*>(dp->data);
   RtcpHeader *chead = reinterpret_cast<RtcpHeader*>(dp->data);
   if (!chead->isRtcp()) {
@@ -807,7 +828,7 @@ void WebRtcConnection::parseIncomingPayloadType(char *buf, int len, packetType t
   }
 }
 
-void WebRtcConnection::write(std::shared_ptr<dataPacket> packet) {
+void WebRtcConnection::write(std::shared_ptr<DataPacket> packet) {
   Transport *transport = (bundle_ || packet->type == VIDEO_PACKET) ? videoTransport_.get() :
                                                                      audioTransport_.get();
   if (transport == nullptr) {
@@ -844,7 +865,7 @@ void WebRtcConnection::asyncTask(std::function<void(std::shared_ptr<WebRtcConnec
   });
 }
 
-void WebRtcConnection::sendPacket(std::shared_ptr<dataPacket> p) {
+void WebRtcConnection::sendPacket(std::shared_ptr<DataPacket> p) {
   if (!sending_) {
     return;
   }

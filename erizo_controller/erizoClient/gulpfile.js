@@ -34,22 +34,20 @@ taskFunctions.erizofc = require('./gulp/erizoFcTasks.js')(gulp, plugins, config)
 
 targets.forEach(
   (target) => {
+    const targetTasks = [];
     tasks.forEach(
       (task) => {
         const taskName = `${task}_${target}`;
         allTasks.push(taskName);
+        targetTasks.push(taskName);
         gulp.task(taskName, () => {
           return taskFunctions[target][task]()
         });
       });
+    gulp.task(target, () => {
+      plugins.runSequence(...targetTasks);
+    })
   });
-
-gulp.task('lint', () => {
-  return gulp.src(config.paths.js)
-  .pipe(plugins.eslint())
-  .pipe(plugins.eslint.format())
-  .pipe(plugins.eslint.failAfterError());
-});
 
 gulp.task('watch', () => {
   const watcher = gulp.watch('src/**/*.js');

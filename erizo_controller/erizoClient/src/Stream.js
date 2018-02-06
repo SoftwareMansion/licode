@@ -1,4 +1,4 @@
-/* global document*/
+/* global document */
 
 import { EventDispatcher, StreamEvent } from './Events';
 import Connection from './Connection';
@@ -69,13 +69,13 @@ const Stream = (altConnection, specInput) => {
   };
 
   // Indicates if the stream has audio activated
-  that.hasAudio = () => spec.audio;
+  that.hasAudio = () => spec.audio !== false && spec.audio !== undefined;
 
   // Indicates if the stream has video activated
-  that.hasVideo = () => spec.video;
+  that.hasVideo = () => spec.video !== false && spec.video !== undefined;
 
   // Indicates if the stream has data activated
-  that.hasData = () => spec.data;
+  that.hasData = () => spec.data !== false && spec.data !== undefined;
 
   // Indicates if the stream has screen activated
   that.hasScreen = () => spec.screen;
@@ -282,9 +282,8 @@ const Stream = (altConnection, specInput) => {
     const config = configInput;
     // TODO: Check for any incompatible options
     if (isUpdate === true) {  // We are updating the stream
-      if (config.video || config.audio || config.screen) {
+      if (config.audio || config.screen) {
         Logger.warning('Cannot update type of subscription');
-        config.video = undefined;
         config.audio = undefined;
         config.screen = undefined;
       }
@@ -323,7 +322,9 @@ const Stream = (altConnection, specInput) => {
     }
     const config = { muteStream: { audio: that.audioMuted, video: that.videoMuted } };
     that.checkOptions(config, true);
-    that.pc.updateSpec(config, callback);
+    if (that.pc) {
+      that.pc.updateSpec(config, callback);
+    }
   };
 
   that.muteAudio = (isMuted, callback = () => {}) => {

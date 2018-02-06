@@ -26,7 +26,8 @@ static std::mutex dtls_mutex;
 
 Resender::Resender(DtlsTransport* transport, dtls::DtlsSocketContext* ctx)
     : transport_(transport), socket_context_(ctx),
-      resend_seconds_(kInitialSecsPerResend), max_resends_(kMaxResends) {
+      resend_seconds_(kInitialSecsPerResend), max_resends_(kMaxResends),
+      scheduled_task_{std::make_shared<ScheduledTaskReference>()} {
 }
 
 Resender::~Resender() {
@@ -73,7 +74,7 @@ DtlsTransport::DtlsTransport(MediaType med, const std::string &transport_name, c
                             const IceConfig& iceConfig, std::string username, std::string password,
                             bool isServer, std::shared_ptr<Worker> worker, std::shared_ptr<IOWorker> io_worker):
   Transport(med, transport_name, connection_id, bundle, rtcp_mux, transport_listener, iceConfig, worker, io_worker),
-  unprotect_packet_{std::make_shared<dataPacket>()},
+  unprotect_packet_{std::make_shared<DataPacket>()},
   readyRtp(false), readyRtcp(false), isServer_(isServer) {
     ELOG_DEBUG("%s message: constructor, transportName: %s, isBundle: %d", toLog(), transport_name.c_str(), bundle);
     dtlsRtp.reset(new DtlsSocketContext());
@@ -259,7 +260,7 @@ void DtlsTransport::onDtlsPacket(DtlsSocketContext *ctx, const unsigned char* da
   bool is_rtcp = ctx == dtlsRtcp.get();
   int component_id = is_rtcp ? 2 : 1;
 
-  packetPtr packet = std::make_shared<dataPacket>(component_id, data, len);
+  packetPtr packet = std::make_shared<DataPacket>(component_id, data, len);
 
   if (is_rtcp) {
     rtcp_resender_->scheduleResend(packet);
